@@ -1,25 +1,35 @@
 #include <Servo.h>
  
-Servo servo;
+Servo servoStylus, servoPower;
 
 int detectorPIN = D2;
-int servoPIN = D1;
-int servoStartPos = 0;
-int servoStopPos = 110;
+int servoStylusPIN = D1;
+int servoPowerPIN = D3; // WARNING: detach this servo when uploading 
+
+int servoStylusLowerPos = 3;
+int servoStylusHigherPos = 140;
+int servoPowerRestPos = 0;
+int servoPowerOffPos = 180;
 
 bool pause = false;
 
 void setup() {
   Serial.begin(9600);
 
-  servo.write(servoStartPos);
-  servo.attach(servoPIN);
+  servoStylus.write(servoStylusLowerPos);
+  servoStylus.attach(servoStylusPIN);
+
+  servoPower.write(servoPowerRestPos);
+  servoPower.attach(servoPowerPIN);
 
   pinMode(detectorPIN, INPUT);
   
   delay(500);
   raiseStylus();
   releaseStylus();
+  delay(500);
+  powerOff();
+  delay(1000);/**/
 }
 
 void loop() {
@@ -29,26 +39,39 @@ void loop() {
       raiseStylus();
       delay(500);
       releaseStylus();
+      powerOff();
     }
     pause = true;
   } else {
     Serial.print(".");
     pause = false;
   }
-  delay(1000);
+  delay(1000);/**/
 }
 
 void raiseStylus() {
-  for (int pos = servoStartPos; pos <= servoStopPos; pos += 1) { 
-    servo.write(pos);
+  for (int pos = servoStylusLowerPos; pos <= servoStylusHigherPos; pos += 1) { 
+    servoStylus.write(pos);
     delay(10);
   }
 }
 
 void releaseStylus() {
-  servo.write(servoStartPos);
-  /*for (int pos = servoStopPos; pos >= servoStartPos; pos -= 1) { 
-    servo.write(pos);
+  servoStylus.write(servoStylusLowerPos);
+  /*for (int pos = servoStylusHigherPos; pos >= servoStylusLowerPos; pos -= 1) { 
+    servoStylus.write(pos);
     delay(15);
   }*/
+}
+
+void powerOff() {
+  for (int pos = servoPowerRestPos; pos <= servoPowerOffPos; pos += 1) { 
+    servoPower.write(pos);
+    delay(10);
+  }
+  powerRest();
+}
+
+void powerRest() {
+  servoPower.write(servoPowerRestPos);
 }
