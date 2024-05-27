@@ -9,5 +9,6 @@ Future implementazioni potrebbero portare allo spegnimento del giradischi, al ri
 
 ## Release notes
 
-v0.1.0: Aggiunto servo per spostare la levetta da 33 giri a off
+v0.1.1: Webserver per attivare il comando di pausa e stop via web request    
+v0.1.0: Aggiunto servo per spostare la levetta da 33 giri a off    
 v0.0.1: Prima release
