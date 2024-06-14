@@ -4,40 +4,47 @@
 #include <ESP8266mDNS.h>
 
  
-Servo servoStylus, servoPower;
+Servo servoStylus, servoSpeedSelector;
 ESP8266WebServer webServer(80);
 WiFiManager wifiManager;
 bool wifiRes;
 
-int detectorPIN = D2;
+int sensorDiskEndedPIN = D2;
 int servoStylusPIN = D1;
-int servoPowerPIN = D3; // WARNING: detach this servo when uploading 
+int servoSpeedSelectorPIN = D3; // WARNING: detach this servo when uploading 
+int releSelfPowerPIN = D0;
 
 int servoStylusLowerPos = 3;
 int servoStylusHigherPos = 140;
-int servoPowerRestPos = 0;
-int servoPowerOffPos = 180;
+int servoSpeedSelector45Pos = 31;
+int servoSpeedSelectorOffPos = 90;
+int servoSpeedSelector33Pos = 149;
+int servoSpeedSelectorCurrentPos = servoSpeedSelectorOffPos;
+
+String turntableStatus = "stop";
+String turntableSpeed = "0";
 
 bool pause = false;
 static unsigned long last_time = 0;
 
 void setup() {
-  Serial.begin(9600);
+  Serial.begin(115200);
 
+  // Keep power on
+  pinMode(releSelfPowerPIN, OUTPUT);
+  selfPowerOn();
+  // Optical sensor
+  pinMode(sensorDiskEndedPIN, INPUT);
+
+  // Servo stylus init
   servoStylus.write(servoStylusLowerPos);
   servoStylus.attach(servoStylusPIN);
-
-  servoPower.write(servoPowerRestPos);
-  servoPower.attach(servoPowerPIN);
-
-  pinMode(detectorPIN, INPUT);
-  
-  delay(500);
   pausePlaying();
-  delay(500);
-  powerOff();
-  delay(1000);/**/
 
+  // Servo speed selector init
+  servoSpeedSelectorToPosition(servoSpeedSelectorOffPos);  
+
+  // Network init
   WiFi.mode(WIFI_STA);
   wifiManager.setAPCallback(configModeCallback);
   wifiManager.autoConnect("TurntableAP", "TurntableAPPassword");
@@ -49,22 +56,28 @@ void setup() {
   Serial.println("mDNS responder started");
   MDNS.addService("http", "tcp", 80);
 
-  webServer.on("/pause", getPause);
-  webServer.on("/stop", getStop);
+  webServer.on("/pause", httpGETPause);
+  webServer.on("/stop", httpGETStop);
+  webServer.on("/status", httpGETStatus);
+  webServer.on("/play45", httpGETPlay45);
+  webServer.on("/play33", httpGETPlay33);
   webServer.onNotFound(handleNotFound);
   webServer.begin();
 }
 
 void loop() {
+  // every loop
   MDNS.update();
   webServer.handleClient();
 
+  // every 1s
   if(millis() - last_time > 1000) {
-    if (digitalRead(detectorPIN) == HIGH) {
-      Serial.println("detected");
+    if (digitalRead(sensorDiskEndedPIN) == HIGH) {
+      Serial.println("End of record detected");
       if (!pause) {
         pausePlaying();
-        powerOff();
+        stopSpin();
+        selfPowerOff();
       }
       pause = true;
     } else {
@@ -75,11 +88,16 @@ void loop() {
   }
 }
 
+// PLAY PAUSE STOP FUNCTIONS
+
 void pausePlaying() {
   raiseStylus();
   delay(500);
   releaseStylus();
+  turntableStatus = "pause";
 }
+
+// STYLUS FUNCTIONS
 
 void raiseStylus() {
   for (int pos = servoStylusLowerPos; pos <= servoStylusHigherPos; pos += 1) { 
@@ -90,22 +108,69 @@ void raiseStylus() {
 
 void releaseStylus() {
   servoStylus.write(servoStylusLowerPos);
-  /*for (int pos = servoStylusHigherPos; pos >= servoStylusLowerPos; pos -= 1) { 
-    servoStylus.write(pos);
-    delay(15);
-  }*/
 }
 
-void powerOff() {
-  for (int pos = servoPowerRestPos; pos <= servoPowerOffPos; pos += 1) { 
-    servoPower.write(pos);
-    delay(10);
+// RECORD SPIN FUNCIONS
+
+void servoSpeedSelectorToPosition(int position) {
+  Serial.print("Servo speed selector from ");
+  Serial.print(servoSpeedSelectorCurrentPos);
+  Serial.print(" to ");
+  Serial.println(position);
+  servoSpeedSelector.write(servoSpeedSelectorCurrentPos);
+  servoSpeedSelector.attach(servoSpeedSelectorPIN);
+  if (servoSpeedSelectorCurrentPos < position) {
+    for (int pos = servoSpeedSelectorCurrentPos; pos < position; pos += 1) { 
+      servoSpeedSelector.write(pos);
+      delay(10);
+    }
+  } 
+  if (servoSpeedSelectorCurrentPos > position) {
+    for (int pos = servoSpeedSelectorCurrentPos; pos > position; pos -= 1) { 
+      servoSpeedSelector.write(pos);
+      delay(10);
+    }
   }
-  powerRest();
+  servoSpeedSelector.write(position);
+  delay(200);
+  servoSpeedSelectorCurrentPos = position;
+  servoSpeedSelector.detach();
 }
 
-void powerRest() {
-  servoPower.write(servoPowerRestPos);
+void stopSpin() {
+  int targetPosition = servoSpeedSelectorOffPos;
+  Serial.print("Stop spinning from ");
+  Serial.println(turntableSpeed);
+  if (turntableSpeed == "45") {
+    targetPosition += 5;
+  } 
+  if (turntableSpeed == "33") {
+    targetPosition -= 5;
+  }
+  servoSpeedSelectorToPosition(targetPosition);
+  servoSpeedSelectorToPosition(servoSpeedSelectorOffPos);
+  turntableStatus = "stop";
+  turntableSpeed = "0";
+}
+
+void startSpin(String speed) {
+  int targetPosition = ((speed == "33") ? servoSpeedSelector33Pos : servoSpeedSelector45Pos);
+  Serial.print("Start spinning to ");
+  Serial.println(speed);
+  servoSpeedSelectorToPosition(targetPosition);
+  turntableStatus = "play";
+  turntableSpeed = speed;
+}
+
+// POWER FUNCTIONS
+
+void selfPowerOn() {
+  digitalWrite(releSelfPowerPIN, 1);
+}
+
+void selfPowerOff() {
+  delay(500);
+  digitalWrite(releSelfPowerPIN, 0);
 }
 
 void configModeCallback (WiFiManager *myWiFiManager) {
@@ -114,17 +179,36 @@ void configModeCallback (WiFiManager *myWiFiManager) {
   Serial.println(wifiManager.getConfigPortalSSID());
 }
 
-void getPause() {
-  Serial.println("API pause");
-  pausePlaying();
-  webServer.send(200);
+void httpGETStatus() {
+  Serial.println("API status");
+  webServer.send(200, "application/json", jsonTurntableStatus());
 }
 
-void getStop() {
+void httpGETPause() {
+  Serial.println("API pause");
+  pausePlaying();
+  webServer.send(200, "application/json", jsonTurntableStatus());
+}
+
+void httpGETStop() {
   Serial.println("API stop");
   pausePlaying();
-  powerOff();
-  webServer.send(200);
+  stopSpin();
+  delay(500);
+  webServer.send(200, "application/json", jsonTurntableStatus());
+  selfPowerOff();
+}
+
+void httpGETPlay45() {
+  Serial.println("API play 45");
+  startSpin("45");
+  webServer.send(200, "application/json", jsonTurntableStatus());
+}
+
+void httpGETPlay33() {
+  Serial.println("API play 33");
+  startSpin("33");
+  webServer.send(200, "application/json", jsonTurntableStatus());
 }
 
 void handleNotFound() {
@@ -141,4 +225,8 @@ void handleNotFound() {
     message += " " + webServer.argName(i) + ": " + webServer.arg(i) + "\n";
   }
   webServer.send(404, "text/plain", message);
+}
+
+String jsonTurntableStatus() {
+  return "{\"status\":\"" + turntableStatus + "\",\"speed\":\"" + turntableSpeed + "\"}";
 }
