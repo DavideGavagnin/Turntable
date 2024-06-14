@@ -22,5 +22,6 @@ L'attivazione del relè della velocità (accensione del giradischi) avviene tram
 
 v1.0.0: Spostato il servocomando del pomello della velocità, ora può selezionare 33 o 45 giri oltre a spegnere il giradischi, migliorata la risposta alle richieste via API.
 v0.2.0: Aggiunto circuito con Relè shield e push-button per spegnere il circuito dopo lo stop del giradischi
-v0.1.0: Aggiunto servo per spostare la levetta da 33 giri a off
+v0.1.1: Webserver per attivare il comando di pausa e stop via web request    
+v0.1.0: Aggiunto servo per spostare la levetta da 33 giri a off    
 v0.0.1: Prima release
